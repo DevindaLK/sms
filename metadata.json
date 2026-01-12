@@ -1,0 +1,9 @@
+
+{
+  "name": "GlowUp - AI-Powered Unisex Salon Management",
+  "description": "A comprehensive salon management platform featuring smart booking, AI hairstyle recommendations, and role-based dashboards for admins, stylists, and customers.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

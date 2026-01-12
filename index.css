@@ -1,0 +1,41 @@
+/* Using Tailwind via CDN in index.html */
+
+:root {
+  --atelier-cream: #FDFBF7;
+  --atelier-nude: #F5E6DA;
+  --atelier-sand: #E5D3C5;
+  --atelier-taupe: #8C7B6E;
+  --atelier-sage: #D1D9D0;
+  --atelier-clay: #B08D79;
+  --atelier-charcoal: #2D241E;
+}
+
+body {
+  background-color: var(--atelier-cream);
+  color: var(--atelier-charcoal);
+  font-family: 'Inter', sans-serif;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: var(--atelier-cream);
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--atelier-sand);
+  border-radius: 10px;
+}
+
+@keyframes swing {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(15deg); }
+  75% { transform: rotate(-15deg); }
+}
+
+.animate-swing {
+  animation: swing 0.5s ease-in-out;
+  transform-origin: top center;
+}

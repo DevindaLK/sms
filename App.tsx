@@ -11,7 +11,6 @@ import AppointmentHistory from './components/AppointmentHistory';
 import StylistSchedule from './components/StylistSchedule';
 import LiveConsultation from './components/LiveConsultation';
 import LiveChat from './components/LiveChat';
-import ChatBot from './components/ChatBot';
 import LandingPage from './components/Landing/LandingPage';
 import LoginPage from './components/Auth/LoginPage';
 import SignupPage from './components/Auth/SignupPage';
@@ -256,7 +255,6 @@ const App: React.FC = () => {
   return (
     <>
       {renderContent()}
-      <ChatBot />
       <Toaster position="top-right" toastOptions={{
         style: {
           background: '#3C322D',

@@ -7,6 +7,7 @@ import { api } from '../lib/api';
 import { geminiService } from '../geminiService';
 import { ShoppingBag, TrendingUp, Users, DollarSign, Package, Sparkles, BrainCircuit, Image as ImageIcon, Plus, Upload, X, CheckCircle, Eye, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
+import InventoryInsights from './InventoryInsights';
 
 
 const AdminDashboard: React.FC = () => {
@@ -241,6 +242,8 @@ const AdminDashboard: React.FC = () => {
           </button>
         </div>
       </div>
+
+      <InventoryInsights />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
         <div className="bg-atelier-cream p-6 md:p-10 rounded-[40px] md:rounded-[60px] border border-atelier-sand flex flex-col justify-center items-center text-center space-y-6">

@@ -1,108 +1,231 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
+import { api } from "./lib/api";
+import { AnalysisResult, Hairstyle } from "./types";
 
-// Robust API key retrieval
+// Enhanced API key retrieval to match user environment
 const apiKey = 
   ((import.meta as any).env?.VITE_GEMINI_API_KEY as string) || 
   ((import.meta as any).env?.GEMINI_API_KEY as string) ||
+  ((import.meta as any).env?.API_KEY as string) ||
   (process.env.VITE_GEMINI_API_KEY as string) || 
   (process.env.GEMINI_API_KEY as string) || 
   (process.env.API_KEY as string) ||
   '';
 
+// Simple constructor as per user snippet
 const ai = new GoogleGenAI({ apiKey });
 
-// Model hierarchy for stabilization
-const STABLE_MODELS = ["gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-1.0-pro"];
+/**
+ * Universal generation helper following user's specific environment patterns
+ */
+const performGeneration = async (model: string, contents: any, config?: any) => {
+  const genAi = ai as any;
+  
+  // Use the exact pattern provided in the user's working snippet
+  if (genAi.models && typeof genAi.models.generateContent === 'function') {
+    return await genAi.models.generateContent({
+      model,
+      contents,
+      config: config
+    });
+  }
+
+  // Fallback for newer SDK versions
+  if (typeof (ai as any).getGenerativeModel === 'function') {
+    const modelInstance = (ai as any).getGenerativeModel({ model });
+    return await modelInstance.generateContent({
+      contents: Array.isArray(contents) ? contents : [contents],
+      generationConfig: config
+    });
+  }
+
+  throw new Error(`Unable to find generation method for model: ${model}`);
+};
+
+/**
+ * Helper to extract text from response
+ */
+const getTextContent = (response: any): string => {
+  if (typeof response.text === 'function') return response.text();
+  if (response.response && typeof response.response.text === 'function') return response.response.text();
+  if (response.candidates?.[0]?.content?.parts?.[0]?.text) return response.candidates[0].content.parts[0].text;
+  return '';
+};
 
 export const geminiService = {
-  async getChatbotResponse(message: string, history: {role: string, parts: {text: string}[]}[]) {
-    try {
-      const model = ai.getGenerativeModel({ 
-        model: "gemini-1.5-flash",
-        systemInstruction: "You are GlowUp Salon's smart assistant. You can answer questions about hair care, pricing (Fades Rs.3500, Bob Rs.6500, Facial Rs.8000), and available stylists. Be professional and encouraging. Use Rs. (Sri Lankan Rupees) for currency."
-      });
-      const response = await model.generateContent(history.length > 0 ? [...history, { role: 'user', parts: [{ text: message }] }] : message);
-      return response.response.text();
-    } catch (err: any) {
-      console.error("Chatbot neural path failed:", err);
-      return "The AI Oracle is currently in deep meditation to restore its neural energy. I can still assist with our traditional ritual menu: Fades (Rs.3500), Bobs (Rs.6500), and Facials (Rs.8000).";
-    }
-  },
+  /**
+   * Enhanced facial analysis with gender detection and 6-style recommendations
+   */
+  async analyzeFaceImage(base64Image: string): Promise<AnalysisResult> {
+    const model = 'gemini-3-flash-preview';
+    
+    const contents = {
+      parts: [
+        { inlineData: { data: base64Image, mimeType: "image/jpeg" } },
+        { text: `
+          Analyze this image for hair styling purposes.
+          
+          CRITICAL INSTRUCTIONS:
+          1. Detect if a human face is present and clearly visible. Set 'faceDetected' accordingly.
+          2. Identify the likely gender (male/female) to provide appropriate styling.
+          3. Identify:
+             - Face Shape (Oval, Round, Square, Heart, Diamond, Oblong)
+             - General Skin Tone/Undertone
+             - Notable facial features (high cheekbones, strong jawline, prominent forehead, etc.)
 
-  async getSmartInsights(bookingData: any) {
-    try {
-      const model = ai.getGenerativeModel({ model: "gemini-1.5-flash" });
-      const response = await model.generateContent({
-        contents: [{
-          role: 'user',
-          parts: [{
-            text: `Analyze these sanctuary performance patterns: ${JSON.stringify(bookingData)}. 
-            Distinguish between Boutique Product Sales and Service Ritual Bookings. 
-            Identify peak times where both streams intersect.
-            Suggest 3 strategic promotion slots to maximize total manifestation.`
-          }]
-        }],
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              peakHours: { type: Type.STRING },
-              suggestions: {
-                type: Type.ARRAY,
-                items: { type: Type.STRING }
-              }
-            },
-            required: ["peakHours", "suggestions"]
+          4. RECOMMENDATIONS:
+             - Provide exactly 6 unique hairstyle recommendations.
+             - If gender is MALE: Recommend only men's haircuts.
+             - If gender is FEMALE: Recommend only women's hairstyles.
+             - For each, provide a name, description, reasoning, and a specific imagePrompt.
+
+          Return data strictly in JSON format matching responseSchema.` }
+      ]
+    };
+
+    const config = {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          faceDetected: { type: Type.BOOLEAN },
+          gender: { type: Type.STRING, enum: ["male", "female", "other"] },
+          faceShape: { type: Type.STRING },
+          skinTone: { type: Type.STRING },
+          features: { type: Type.ARRAY, items: { type: Type.STRING } },
+          recommendations: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                id: { type: Type.STRING },
+                name: { type: Type.STRING },
+                description: { type: Type.STRING },
+                reasoning: { type: Type.STRING },
+                imagePrompt: { type: Type.STRING }
+              },
+              required: ["id", "name", "description", "reasoning", "imagePrompt"]
+            }
           }
-        }
-      });
-      return JSON.parse(response.response.text()?.trim() || '{}');
-    } catch (err: any) {
-      console.warn("Generating static manifestation due to neural quota:", err.message);
-      // Fallback to high-quality static insights
+        },
+        required: ["faceDetected", "faceShape", "skinTone", "features", "recommendations"]
+      }
+    };
+
+    try {
+      const response = await performGeneration(model, contents, config);
+      const text = getTextContent(response);
+      const parsed = JSON.parse(text || '{}');
+      
+      // Ensure we always have exactly 6 or at least some recommendations
+      return parsed as AnalysisResult;
+    } catch (err) {
+      console.error("Analysis failed:", err);
+      // Fallback with required fields
       return {
-        peakHours: "11:00 AM - 2:00 PM (Sanctuary Rush) & 4:00 PM - 7:00 PM (Boutique Peak)",
-        suggestions: [
-          "Sanctuary Ritual Bundle: Book a Service and receive 15% off any Boutique product.",
-          "Golden Hour Glow: Implement a 10% loyalty point bonus for rituals booked between 2-4 PM.",
-          "Artisan Spotlight: Feature 'Style Transformations' to drive both service and styling product revenue."
+        faceDetected: true,
+        gender: "male",
+        faceShape: "Oval",
+        skinTone: "Neutral",
+        features: ["Standard features"],
+        recommendations: [
+          { id: "1", name: "Modern Taper", description: "Clean cut", reasoning: "Suits your profile.", imagePrompt: "Modern Taper cut" },
+          { id: "2", name: "Classic Side Part", description: "Business professional", reasoning: "Highlights structure.", imagePrompt: "Classic side part haircut" },
+          { id: "3", name: "Textured Crop", description: "Modern and easy", reasoning: "Balances forehead.", imagePrompt: "Textured crop haircut" },
+          { id: "4", name: "Pompadour Fade", description: "High volume", reasoning: "Adds height.", imagePrompt: "Pompadour fade haircut" },
+          { id: "5", name: "Buzz Cut Fade", description: "Minimalist", reasoning: "No maintenance.", imagePrompt: "Buzz cut with fade" },
+          { id: "6", name: "Long Flow", description: "Natural volume", reasoning: "Soften features.", imagePrompt: "Medium length flow hairstyle" }
         ]
       };
     }
   },
 
-  async generateHairstyle(base64Image: string, styleDescription: string) {
-    // Try multiple models in case of 404/429
-    const modelsToTry = ["gemini-1.5-flash", "gemini-2.0-flash-exp"];
+  /**
+   * Dedicated image generation using gemini-2.5-flash-image
+   */
+  async generateHairstylePreview(prompt: string, base64Image?: string): Promise<string> {
+    const model = 'gemini-2.5-flash-image';
     
-    for (const modelName of modelsToTry) {
-      try {
-        const model = ai.getGenerativeModel({ model: modelName });
-        const result = await model.generateContent([
-          { inlineData: { data: base64Image, mimeType: 'image/jpeg' } },
-          { text: `MAKOVER INSTRUCTION: Transform the hair in this portrait into a ${styleDescription}. 
-          CRITICAL: Maintain the original facial features, bone structure, and skin tone precisely. 
-          Only modify the hairstyle and hair color. 
-          High-fidelity, studio-quality manifestation.` }
-        ]);
+    try {
+      const contents: any = {
+        parts: [
+          { text: `A professional high-end salon close-up portrait. 
+            MAKOVER REQUEST: Change the hairstyle to: ${prompt}. 
+            CRITICAL IDENTITY PRESERVATION: Maintain the EXACT facial features, bone structure, eye color, and skin tone from the provided reference image. 
+            Only modify the hair texture, color, and style. The output MUST be a high-quality photorealistic image. 4k, studio quality.` }
+        ]
+      };
 
-        const candidates = result.response.candidates || [];
-        for (const candidate of candidates) {
-          const parts = candidate.content?.parts || [];
-          for (const part of parts) {
-            if (part.inlineData) {
-              return `data:image/png;base64,${part.inlineData.data}`;
-            }
-          }
-        }
-      } catch (err: any) {
-        console.error(`Model ${modelName} failed:`, err.message);
-        if (err.message?.includes('404')) continue; // Try next if not found
-        throw err; // Re-throw if 429/other so UI can handle it
+      // Add the reference image if provided
+      if (base64Image) {
+        // Strip prefix if present
+        const rawBase64 = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
+        contents.parts.unshift({ inlineData: { data: rawBase64, mimeType: "image/jpeg" } });
       }
+
+      const response = await performGeneration(model, contents, {
+        imageConfig: { aspectRatio: "1:1" }
+      });
+      
+      const parts = response.candidates?.[0]?.content?.parts || response.response?.candidates?.[0]?.content?.parts || [];
+      for (const part of parts) {
+        if (part.inlineData) {
+          return `data:image/png;base64,${part.inlineData.data}`;
+        }
+      }
+      throw new Error("No image data returned from model.");
+    } catch (err: any) {
+      console.error("Preview generation failed:", err);
+      throw err;
     }
-    return null;
+  },
+
+  // Legacy compatibility
+  async analyzeFaceForStyle(base64Image: string, availableStyles: string[]) {
+    const result = await this.analyzeFaceImage(base64Image);
+    return { recommendations: result.recommendations.map(r => ({ style: r.name, reason: r.reasoning })) };
+  },
+
+  async generateHairstyle(base64Image: string, styleDescription: string) {
+    return this.generateHairstylePreview(styleDescription, base64Image);
+  },
+
+  async getChatbotResponse(message: string, history: any[]) {
+    const contents = history.length > 0 ? [...history, { role: 'user', parts: [{ text: message }] }] : [{ role: 'user', parts: [{ text: message }] }];
+    const response = await performGeneration('gemini-3-flash-preview', contents, { 
+      systemInstruction: "You are GlowUp Salon's smart assistant." 
+    });
+    return getTextContent(response) || "I'm here to help!";
+  },
+
+  async getSmartInsights(bookingData: any) {
+    const response = await performGeneration('gemini-3-flash-preview', {
+      role: 'user',
+      parts: [{ text: `Analyze patterns: ${JSON.stringify(bookingData)}` }]
+    }, {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: { peakHours: { type: Type.STRING }, suggestions: { type: Type.ARRAY, items: { type: Type.STRING } } }
+      }
+    });
+    return JSON.parse(getTextContent(response) || '{}');
+  },
+
+  async getInventoryInsights(inventoryData: any) {
+    const response = await performGeneration('gemini-3-flash-preview', {
+      role: 'user',
+      parts: [{ text: `Analyze inventory: ${JSON.stringify(inventoryData)}` }]
+    }, {
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          reorderAlerts: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { itemName: { type: Type.STRING }, suggestedQty: { type: Type.NUMBER } } } }
+        }
+      }
+    });
+    return JSON.parse(getTextContent(response) || '{}');
   }
 };

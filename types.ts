@@ -64,3 +64,19 @@ export interface Product {
   imageUrl?: string;
   createdAt: string;
 }
+export interface Hairstyle {
+  id: string;
+  name: string;
+  description: string;
+  reasoning: string;
+  imagePrompt: string;
+}
+
+export interface AnalysisResult {
+  faceDetected: boolean;
+  gender?: 'male' | 'female' | 'other';
+  faceShape: string;
+  skinTone: string;
+  features: string[];
+  recommendations: Hairstyle[];
+}

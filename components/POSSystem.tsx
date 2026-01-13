@@ -42,6 +42,10 @@ const POSSystem: React.FC = () => {
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'card'>('card');
   const [receivedAmount, setReceivedAmount] = useState<string>('');
   const [lastSale, setLastSale] = useState<{ items: CartItem[], total: number, sscl: number, subtotal: number, date: Date, received?: number, balance?: number } | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<{ id: string, full_name: string } | null>(null);
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [customers, setCustomers] = useState<any[]>([]);
+  const [showCustomerDropdown, setShowCustomerDropdown] = useState(false);
   const [view, setView] = useState<'terminal' | 'history'>('terminal');
   const [sales, setSales] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -55,6 +59,28 @@ const POSSystem: React.FC = () => {
       fetchSales();
     }
   }, [view, currentPage]);
+
+  useEffect(() => {
+    if (customerSearch.length > 1) {
+      searchCustomers();
+    } else {
+      setCustomers([]);
+    }
+  }, [customerSearch]);
+
+  const searchCustomers = async () => {
+    try {
+      const { data } = await api.getCustomers(1, 10);
+      // Client-side filter for simplicity since getCustomers is simple
+      const filtered = (data || []).filter((c: any) => 
+        c.full_name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+        c.email.toLowerCase().includes(customerSearch.toLowerCase())
+      );
+      setCustomers(filtered);
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   const fetchInventory = async () => {
     try {
@@ -145,7 +171,7 @@ const POSSystem: React.FC = () => {
         sscl: sscl,
         discount: 0,
         payment_method: paymentMethod,
-        customer_id: user?.id,
+        customer_id: selectedCustomer?.id || user?.id,
         received_amount: paymentMethod === 'cash' ? parseFloat(receivedAmount) : total,
         balance_amount: balance
       };
@@ -168,6 +194,8 @@ const POSSystem: React.FC = () => {
       setShowSuccess(true);
       setCart([]);
       setReceivedAmount('');
+      setSelectedCustomer(null);
+      setCustomerSearch('');
       
       // Wait a bit to ensure the DB trigger has finished processing
       setTimeout(async () => {
@@ -448,6 +476,61 @@ const POSSystem: React.FC = () => {
         </div>
 
         <div className="p-8 bg-atelier-cream/50 border-t border-atelier-sand space-y-6">
+          <div className="space-y-3">
+            <label className="text-[10px] font-black text-atelier-clay uppercase tracking-widest ml-1">Customer Selection</label>
+            <div className="relative">
+              {selectedCustomer ? (
+                <div className="flex items-center justify-between bg-white border-2 border-atelier-clay rounded-2xl py-3 px-5 animate-in fade-in zoom-in-95">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-atelier-clay/10 p-2 rounded-full">
+                      <UserIcon className="w-4 h-4 text-atelier-clay" />
+                    </div>
+                    <span className="text-xs font-bold text-atelier-charcoal">{selectedCustomer.full_name}</span>
+                  </div>
+                  <button 
+                    onClick={() => setSelectedCustomer(null)}
+                    className="p-1 hover:bg-atelier-cream rounded-full transition-colors"
+                  >
+                    <X className="w-4 h-4 text-atelier-sand" />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <UserIcon className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-atelier-sand" />
+                  <input 
+                    type="text" 
+                    placeholder="Search customer name or email..." 
+                    className="w-full bg-white border-2 border-atelier-sand focus:border-atelier-clay rounded-2xl py-3 pl-12 pr-6 text-xs outline-none transition-all"
+                    value={customerSearch}
+                    onChange={e => {
+                      setCustomerSearch(e.target.value);
+                      setShowCustomerDropdown(true);
+                    }}
+                    onFocus={() => setShowCustomerDropdown(true)}
+                  />
+                  {showCustomerDropdown && customers.length > 0 && (
+                    <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-atelier-sand rounded-2xl shadow-2xl overflow-hidden z-50 animate-in slide-in-from-bottom-2">
+                      {customers.map(c => (
+                        <div 
+                          key={c.id}
+                          onClick={() => {
+                            setSelectedCustomer(c);
+                            setShowCustomerDropdown(false);
+                            setCustomerSearch('');
+                          }}
+                          className="px-6 py-4 hover:bg-atelier-cream cursor-pointer border-b border-atelier-sand last:border-0 transition-colors"
+                        >
+                          <p className="text-xs font-bold text-atelier-charcoal">{c.full_name}</p>
+                          <p className="text-[10px] text-atelier-taupe">{c.email}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
           <div className="space-y-2">
             <div className="flex justify-between text-xs font-bold text-atelier-taupe uppercase tracking-widest">
               <span>Subtotal</span>

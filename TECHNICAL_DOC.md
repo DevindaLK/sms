@@ -14,7 +14,8 @@ GlowUp is a modern, AI-driven salon management platform built with a focus on pr
 The application follows a modern serverless architecture:
 - **Frontend:** React 19 + Vite (TypeScript)
 - **Backend-as-a-Service:** Supabase (Auth, Database, Storage)
-- **AI Engine:** Google Gemini (Flash 3 & 2.5)
+- **AI Engine:** Google Gemini (Analysis & Recommendations)
+- **Vision Engine:** Google Gemini (Image Manifesting)
 
 ### Supabase Project Configuration
 - **Project Reference:** `nzavytneppcgxnlqccrm`
@@ -60,9 +61,9 @@ The `geminiService.ts` handles all interactions with the Google Gemini API.
 - **Output**: Returns structured JSON data for easy integration into the dashboard.
 
 ### 3. Virtual Try-On (AI Oracle)
-- **Model**: `gemini-2.5-flash-image`
-- **Purpose**: Allows users to visualize different hairstyles on their own photos.
-- **Mechanism**: Processes base64 image data and a style description to generate a realistic preview.
+- **Engine**: Google Gemini (`gemini-3-flash-preview` for analysis, `gemini-2.5-flash-image` for generation)
+- **Purpose**: Personalized recommendations and visual try-on for hairstyles.
+- **Mechanism**: Analyzes user facial structure and "manifests" chosen hairstyles using generative patterns to provide an aesthetic preview.
 
 ---
 

@@ -24,7 +24,8 @@ import AppointmentManager from './components/AppointmentManager';
 import { UserRole } from './types';
 import { supabase } from './lib/supabase';
 import { Search, Bell, User as UserIcon, ShieldCheck, Sparkles } from 'lucide-react';
-import { Toaster } from 'react-hot-toast';
+import { Toaster, toast } from 'react-hot-toast';
+import { api } from './lib/api';
 
 const App: React.FC = () => {
   const [role, setRole] = useState<UserRole>(UserRole.CUSTOMER);
@@ -33,6 +34,7 @@ const App: React.FC = () => {
   const [user, setUser] = useState<any>(null);
   const [editingAppointment, setEditingAppointment] = useState<any>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
 
   useEffect(() => {
     const fetchProfile = async (user: any) => {
@@ -86,6 +88,7 @@ const App: React.FC = () => {
         setUser(session.user);
         setIsAuthenticated(true);
         fetchProfile(session.user);
+        fetchUnreadCount();
       }
     });
 
@@ -95,14 +98,51 @@ const App: React.FC = () => {
       setIsAuthenticated(!!session);
       if (session?.user) {
         fetchProfile(session.user);
+        fetchUnreadCount();
       } else {
         setRole(UserRole.CUSTOMER); // Default role for guests
         setActiveView('landing');
+        setUnreadChatCount(0);
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Global Chat Subscription
+    const chatChannel = supabase
+      .channel('global_unread_count')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'chat_messages' 
+      }, () => {
+        fetchUnreadCount();
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+      supabase.removeChannel(chatChannel);
+    };
   }, []);
+
+  const fetchUnreadCount = async () => {
+    try {
+      const count = await api.getUnreadMessageCount();
+      setUnreadChatCount(count);
+      
+      // Notify if count > 0 and user just logged in or view is landing
+      if (count > 0 && activeView === 'landing') {
+        // We'll show this after a slight delay to ensure user is redirected
+        setTimeout(() => {
+          toast('messages awaiting your presence', {
+            icon: '💬',
+            duration: 5000,
+          });
+        }, 1000);
+      }
+    } catch (err) {
+      console.error('Failed to fetch neural echoes count:', err);
+    }
+  };
 
   // View Handlers
   const handleEnterApp = () => setActiveView('login');
@@ -199,6 +239,7 @@ const App: React.FC = () => {
           onViewChange={handleViewChange} 
           isOpen={isSidebarOpen}
           onClose={() => setIsSidebarOpen(false)}
+          unreadChatCount={unreadChatCount}
           onLogout={async () => {
             try {
               await supabase.auth.signOut();

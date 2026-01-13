@@ -145,11 +145,6 @@ const Header: React.FC<HeaderProps> = ({ user: initialUser, role, onLogout, onVi
           className="relative text-atelier-sand hover:text-atelier-charcoal transition-colors group"
         >
           <Bell className="w-5 h-5 group-hover:animate-swing" />
-          {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] bg-atelier-clay text-white text-[9px] font-black rounded-full border-2 border-white flex items-center justify-center px-1">
-              {unreadCount > 9 ? '9+' : unreadCount}
-            </span>
-          )}
         </button>
         <div className="h-10 w-px bg-atelier-sand"></div>
         

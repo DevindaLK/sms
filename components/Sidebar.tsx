@@ -22,11 +22,12 @@ interface SidebarProps {
   activeView: string;
   onViewChange: (view: string) => void;
   onLogout: () => void;
+  unreadChatCount?: number;
   isOpen?: boolean;
   onClose?: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ role, activeView, onViewChange, onLogout, isOpen, onClose }) => {
+const Sidebar: React.FC<SidebarProps> = ({ role, activeView, onViewChange, onLogout, isOpen, onClose, unreadChatCount = 0 }) => {
   const adminLinks = [
     { id: 'dashboard', icon: LayoutDashboard, label: 'Overview' },
     { id: 'pos', icon: CreditCard, label: 'POS' },
@@ -96,7 +97,12 @@ const Sidebar: React.FC<SidebarProps> = ({ role, activeView, onViewChange, onLog
             }`}
           >
             <link.icon className={`w-4 h-4 ${activeView === link.id ? 'text-atelier-clay' : 'text-atelier-sand'}`} />
-            <span className="font-bold">{link.label}</span>
+            <span className="font-bold flex-1 text-left">{link.label}</span>
+            {link.id === 'live-chat' && unreadChatCount > 0 && (
+              <span className="flex items-center justify-center w-5 h-5 bg-atelier-clay text-white text-[8px] font-black rounded-full shadow-lg animate-pulse">
+                {unreadChatCount}
+              </span>
+            )}
           </button>
         ))}
       </nav>

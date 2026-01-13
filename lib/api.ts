@@ -670,36 +670,29 @@ export const api = {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return 0;
 
-    const { count, error } = await supabase
+    const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+    
+    let query = supabase
       .from('chat_messages')
       .select('*', { count: 'exact', head: true })
       .eq('is_read', false)
-      .neq('sender_id', user.id)
-      .filter('thread_id', 'in', 
-        supabase
-          .from('chat_threads')
-          .select('id')
-          .or(`customer_id.eq.${user.id},stylist_id.eq.${user.id}`)
-      );
+      .neq('sender_id', user.id);
 
-    if (error) {
-      // Fallback: More robust query if subquery fails in RLS
+    // If not admin, only count messages in threads user is part of
+    if (profile?.role !== 'admin') {
       const { data: threads } = await supabase
         .from('chat_threads')
         .select('id')
         .or(`customer_id.eq.${user.id},stylist_id.eq.${user.id}`);
       
       if (!threads || threads.length === 0) return 0;
-      
-      const { count: altCount, error: altError } = await supabase
-        .from('chat_messages')
-        .select('*', { count: 'exact', head: true })
-        .eq('is_read', false)
-        .neq('sender_id', user.id)
-        .in('thread_id', threads.map(t => t.id));
-        
-      if (altError) return 0;
-      return altCount || 0;
+      query = query.in('thread_id', threads.map(t => t.id));
+    }
+
+    const { count, error } = await query;
+    if (error) {
+      console.error('Unread count error:', error);
+      return 0;
     }
 
     return count || 0;
@@ -717,5 +710,24 @@ export const api = {
       .eq('is_read', false);
 
     if (error) throw error;
+  },
+
+  async getUnreadCountsPerThread() {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return {};
+
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select('thread_id')
+      .eq('is_read', false)
+      .neq('sender_id', user.id);
+
+    if (error) return {};
+
+    const counts: Record<string, number> = {};
+    data.forEach(m => {
+      counts[m.thread_id] = (counts[m.thread_id] || 0) + 1;
+    });
+    return counts;
   }
 };

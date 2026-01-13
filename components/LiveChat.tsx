@@ -21,6 +21,7 @@ const LiveChat: React.FC<LiveChatProps> = ({ userRole, currentUserId }) => {
   const [artisans, setArtisans] = useState<any[]>([]);
   const [showArtisanSelect, setShowArtisanSelect] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const isAdmin = userRole === UserRole.ADMIN;
@@ -29,6 +30,7 @@ const LiveChat: React.FC<LiveChatProps> = ({ userRole, currentUserId }) => {
 
   useEffect(() => {
     fetchThreads();
+    fetchUnreadCounts();
     if (isCustomer) {
       fetchArtisans();
     }
@@ -53,9 +55,21 @@ const LiveChat: React.FC<LiveChatProps> = ({ userRole, currentUserId }) => {
           });
           if (payload.new.sender_id !== currentUserId) {
             markAsRead(activeThread.id);
+            fetchUnreadCounts();
+          } else {
+            // Sent by me, but let's refresh to see if it's marked as read (though unlikely so soon)
+            // or just rely on real-time updates for existing messages
           }
           fetchThreads(); // Refresh thread order
           scrollToBottom();
+        })
+        .on('postgres_changes', {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `thread_id=eq.${activeThread.id}`
+        }, payload => {
+          setMessages(prev => prev.map(m => m.id === payload.new.id ? payload.new : m));
         })
         .subscribe();
       
@@ -86,6 +100,15 @@ const LiveChat: React.FC<LiveChatProps> = ({ userRole, currentUserId }) => {
     }
   };
 
+  const fetchUnreadCounts = async () => {
+    try {
+      const counts = await api.getUnreadCountsPerThread();
+      setUnreadCounts(counts);
+    } catch (err) {
+      console.error('Failed to retrieve unread indicators:', err);
+    }
+  };
+
   const fetchArtisans = async () => {
     try {
       const data = await api.getArtisans();
@@ -99,6 +122,7 @@ const LiveChat: React.FC<LiveChatProps> = ({ userRole, currentUserId }) => {
     try {
       const data = await api.getChatMessages(threadId);
       setMessages(data);
+      markAsRead(threadId); // Mark as read after fetching
     } catch (err) {
       toast.error('Failed to retrieve neural echoes');
     }
@@ -107,6 +131,7 @@ const LiveChat: React.FC<LiveChatProps> = ({ userRole, currentUserId }) => {
   const markAsRead = async (threadId: string) => {
     try {
       await api.markMessagesAsRead(threadId);
+      setUnreadCounts(prev => ({ ...prev, [threadId]: 0 }));
     } catch (err) {
       console.error('Mark as read error:', err);
     }
@@ -147,6 +172,12 @@ const LiveChat: React.FC<LiveChatProps> = ({ userRole, currentUserId }) => {
     if (thread.type === 'admin') return 'PAWA ATELIER';
     if (isCustomer) return thread.stylist?.full_name || 'Sanctuary Artisan';
     return thread.customer?.full_name || 'Member';
+  };
+
+  const getPartnerAvatar = (thread: any) => {
+    if (thread.type === 'admin') return null;
+    if (isCustomer) return thread.stylist?.avatar_url;
+    return thread.customer?.avatar_url;
   };
 
   const filteredThreads = threads.filter(t => 
@@ -196,17 +227,21 @@ const LiveChat: React.FC<LiveChatProps> = ({ userRole, currentUserId }) => {
                   : 'hover:bg-atelier-clay/5 text-atelier-charcoal/60'
               }`}
             >
-              <div className="w-12 h-12 rounded-full bg-atelier-sand flex items-center justify-center text-atelier-charcoal shadow-inner overflow-hidden">
-                {(thread.type === 'admin' && !isCustomer) || (isCustomer && thread.type === 'admin') ? (
+              <div className="w-12 h-12 rounded-full bg-atelier-sand flex items-center justify-center text-atelier-charcoal shadow-inner overflow-hidden relative shrink-0">
+                {getPartnerAvatar(thread) ? (
+                  <img src={getPartnerAvatar(thread)} alt={getPartnerLabel(thread)} className="w-full h-full object-cover" />
+                ) : (thread.type === 'admin' && !isCustomer) || (isCustomer && thread.type === 'admin') ? (
                   <ShieldCheck className="w-6 h-6" />
                 ) : (
                   <User className="w-6 h-6" />
                 )}
               </div>
               <div className="text-left flex-1 min-w-0">
-                <p className="text-[10px] font-bold uppercase tracking-widest truncate">
-                  {getPartnerLabel(thread)}
-                </p>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-widest truncate">
+                    {getPartnerLabel(thread)}
+                  </p>
+                </div>
                 <p className={`text-[8px] tracking-[0.2em] font-medium uppercase opacity-60`}>
                   {thread.type === 'admin' ? 'Strategic Council' : 'Artisan Dialogue'}
                 </p>
@@ -229,8 +264,14 @@ const LiveChat: React.FC<LiveChatProps> = ({ userRole, currentUserId }) => {
                 >
                   <ChevronLeft className="w-5 h-5" />
                 </button>
-                <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-atelier-sand flex items-center justify-center text-atelier-charcoal shadow-lg">
-                  {activeThread.type === 'admin' ? <ShieldCheck className="w-5 h-5 md:w-6 md:h-6" /> : <User className="w-5 h-5 md:w-6 md:h-6" />}
+                <div className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-atelier-sand flex items-center justify-center text-atelier-charcoal shadow-lg overflow-hidden shrink-0">
+                  {getPartnerAvatar(activeThread) ? (
+                    <img src={getPartnerAvatar(activeThread)} alt={getPartnerLabel(activeThread)} className="w-full h-full object-cover" />
+                  ) : activeThread.type === 'admin' ? (
+                    <ShieldCheck className="w-5 h-5 md:w-6 md:h-6" />
+                  ) : (
+                    <User className="w-5 h-5 md:w-6 md:h-6" />
+                  )}
                 </div>
                 <div>
                   <h3 className="text-xs md:text-sm font-bold text-atelier-charcoal uppercase tracking-[0.2em] md:tracking-[0.3em]">
@@ -260,9 +301,16 @@ const LiveChat: React.FC<LiveChatProps> = ({ userRole, currentUserId }) => {
                         : 'bg-white text-atelier-charcoal border border-atelier-clay/10 rounded-tl-none'
                     }`}>
                       <p className="text-xs leading-relaxed font-medium">{msg.content}</p>
-                      <p className={`text-[8px] mt-2 font-bold uppercase tracking-widest opacity-40`}>
-                        {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
+                      <div className="flex items-center justify-between gap-4 mt-2">
+                        <p className={`text-[8px] font-bold uppercase tracking-widest opacity-40`}>
+                          {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        {msg.sender_id === currentUserId && (
+                          <span className={`text-[7px] font-black uppercase tracking-widest ${msg.is_read ? 'text-white' : 'text-atelier-sand/60'}`}>
+                            {msg.is_read ? 'Read' : 'Sent'}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </motion.div>
                 ))}
@@ -349,8 +397,12 @@ const LiveChat: React.FC<LiveChatProps> = ({ userRole, currentUserId }) => {
                     onClick={() => startThread(artisan.id, 'stylist')}
                     className="w-full p-4 hover:bg-white rounded-[25px] flex items-center gap-4 transition-all shadow-sm border border-transparent hover:border-atelier-clay/10"
                   >
-                    <div className="w-12 h-12 rounded-full bg-atelier-sand flex items-center justify-center text-atelier-charcoal">
-                      <User className="w-6 h-6" />
+                    <div className="w-12 h-12 rounded-full bg-atelier-sand flex items-center justify-center text-atelier-charcoal overflow-hidden shrink-0">
+                      {artisan.avatar_url ? (
+                        <img src={artisan.avatar_url} alt={artisan.full_name} className="w-full h-full object-cover" />
+                      ) : (
+                        <User className="w-6 h-6" />
+                      )}
                     </div>
                     <div className="text-left">
                       <p className="text-xs font-bold uppercase tracking-widest text-atelier-charcoal">{artisan.full_name}</p>
